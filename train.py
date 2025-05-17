@@ -250,7 +250,7 @@ def main():
     # read file from argument
     file = "args1.json"
     # load the json args
-    with open(f'/home/lsx/workspace/project/diffAD/args/{file}', 'r') as f:
+    with open(f'./args/{file}', 'r') as f:
         args = json.load(f)
     args['arg_num'] = file[4:-5]
     args = defaultdict_from_json(args)
