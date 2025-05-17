@@ -1,14 +1,14 @@
 # 忽略 outputs 文件夹 (通常在项目根目录)
-outputs/
+**/outputs/
 
 # 忽略 combusion_dataset 文件夹 (通常在项目根目录)
-combusion_dataset/
+**/combusion_dataset/
 
 # 忽略所有 __pycache__ 文件夹，无论它们在哪个子目录中
-__pycache__/
+**/__pycache__/
 
 # 忽略所有 __pycache__ 文件夹，无论它们在哪个子目录中
-.venv/
+**/.venv/
 
 # 忽略原始数据
 *.npy
