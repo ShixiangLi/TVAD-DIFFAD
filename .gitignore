@@ -1,12 +1,16 @@
 # 忽略 outputs 文件夹 (通常在项目根目录)
 outputs/
 
-# 忽略 datasets 文件夹 (通常在项目根目录)
+# 忽略 combusion_dataset 文件夹 (通常在项目根目录)
 combusion_dataset/
-raw_data/
 
 # 忽略所有 __pycache__ 文件夹，无论它们在哪个子目录中
 __pycache__/
 
 # 忽略所有 __pycache__ 文件夹，无论它们在哪个子目录中
 .venv/
+
+# 忽略原始数据
+label.npy
+video_data.npy
+current_data.npy
