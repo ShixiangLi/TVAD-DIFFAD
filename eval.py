@@ -649,28 +649,13 @@ def main():
 
         # Update these paths from your args_config
         mvtec_root = args_config.get("mvtec_root_path", "path/to/mvtec")
-        visa_root = args_config.get("visa_root_path", "path/to/visa")
-        mpdd_root = args_config.get("mpdd_root_path", "path/to/mpdd")
-        dagm_root = args_config.get("dagm_root_path", "path/to/dagm")
         custom_root = args_config.get("custom_dataset_root_path", "path/to/custom")
 
 
-        if sub_class_item in args_config.get('visa_classes', visa_classes_default):
-            dataset_root_main = os.path.join(visa_root, sub_class_item)
-            TestDS_Class = VisATestDataset
-            class_type_name = 'VisA'
-        elif sub_class_item in args_config.get('mpdd_classes', mpdd_classes_default):
-            dataset_root_main = os.path.join(mpdd_root, sub_class_item)
-            TestDS_Class = MPDDTestDataset # Assuming same structure as MVTecTestDataset
-            class_type_name = 'MPDD'
-        elif sub_class_item in args_config.get('mvtec_classes', mvtec_classes_default):
+        if sub_class_item in args_config.get('mvtec_classes', mvtec_classes_default):
             dataset_root_main = os.path.join(mvtec_root, sub_class_item)
             TestDS_Class = MVTecTestDataset
             class_type_name = 'MVTec'
-        elif sub_class_item in args_config.get('dagm_classes', dagm_classes_default):
-            dataset_root_main = os.path.join(dagm_root, sub_class_item)
-            TestDS_Class = DAGMTestDataset
-            class_type_name = 'DAGM'
         elif sub_class_item in args_config.get('custom_dataset_classes', custom_dataset_classes_default):
             dataset_root_main = os.path.join(custom_root, sub_class_item)
             TestDS_Class = CustomTestDataset

@@ -418,26 +418,11 @@ def main():
         # Determine dataset paths and types
         class_type_str = "Unknown" # For logging/saving paths
         
-        if sub_class_name in visa_classes and "visa_root_path" in args:
-            dataset_root_path = os.path.join(args["visa_root_path"], sub_class_name)
-            TrainDS = VisATrainDataset
-            TestDS = VisATestDataset
-            class_type_str = 'VisA'
-        elif sub_class_name in mpdd_classes and "mpdd_root_path" in args:
-            dataset_root_path = os.path.join(args["mpdd_root_path"], sub_class_name)
-            TrainDS = MPDDTrainDataset
-            TestDS = MPDDTestDataset
-            class_type_str = 'MPDD'
-        elif sub_class_name in mvtec_classes and "mvtec_root_path" in args:
+        if sub_class_name in mvtec_classes and "mvtec_root_path" in args:
             dataset_root_path = os.path.join(args["mvtec_root_path"], sub_class_name)
             TrainDS = MVTecTrainDataset
             TestDS = MVTecTestDataset
             class_type_str = 'MVTec'
-        elif sub_class_name in dagm_classes and "dagm_root_path" in args:
-            dataset_root_path = os.path.join(args["dagm_root_path"], sub_class_name)
-            TrainDS = DAGMTrainDataset
-            TestDS = DAGMTestDataset
-            class_type_str = 'DAGM'
         elif sub_class_name in custom_dataset_classes and "custom_dataset_root_path" in args:
             dataset_root_path = os.path.join(args["custom_dataset_root_path"], sub_class_name)
             TrainDS = CustomTrainDataset
