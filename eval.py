@@ -316,85 +316,106 @@ def show_cam_on_image(rgb_img_0_255, anomaly_map_0_1_normalized, weight=0.6): # 
 # min_max_norm already defined globally
 
 # heatmap plotting function (from original) - simplified for clarity
-def save_visualizations(image_path_str, raw_image_orig_chw_01, gt_mask_chw_01, out_mask_chw_01, 
+def save_visualizations(image_path_str, raw_image_orig_chw_01, gt_mask_chw_01, out_mask_chw_01,
                         pred_x_0_condition_chw_01, args_config, sub_class_name, checkpoint_type, image_score_val,
-                        x_normal_t_chw_01=None, x_noiser_t_chw_01=None, pred_x_t_noisier_chw_01=None, 
+                        x_normal_t_chw_01=None, x_noiser_t_chw_01=None, pred_x_t_noisier_chw_01=None,
                         pred_x_0_normal_chw_01=None, pred_x_0_noisier_chw_01=None):
 
-    # Prepare directory for saving visualizations
-    viz_path = os.path.join(
-        args_config["output_path"], 
-        "metrics", 
-        f"ARGS={args_config['arg_num']}", 
-        sub_class_name, 
+    viz_path_base = os.path.join(
+        args_config["output_path"],
+        "metrics",
+        f"ARGS={args_config['arg_num']}",
+        sub_class_name)
+    viz_path_specific = os.path.join(viz_path_base,
         f"visualization_{args_config['eval_normal_t']}_{args_config['eval_noisier_t']}_{args_config['condition_w']}condition_{checkpoint_type}ck"
     )
-    os.makedirs(viz_path, exist_ok=True)
+    os.makedirs(viz_path_specific, exist_ok=True)
 
-    # Convert CHW [0,1] or [-1,1] numpy arrays to HWC uint8 [0,255] for display
-    raw_image_disp = image_transform_back_to_255(raw_image_orig_chw_01.transpose(1,2,0)) # Transpose to HWC
-    
-    gt_mask_disp = (gt_mask_chw_01[0] * 255.0).astype(np.uint8) # Assuming single channel mask (H,W)
-    
-    # Anomaly map processing
-    anomaly_map_raw = out_mask_chw_01[0] # Assuming (1,H,W) -> (H,W)
-    anomaly_map_smoothed = gaussian_filter(anomaly_map_raw, sigma=args_config.get("viz_gaussian_sigma", 4))
-    anomaly_map_normalized = min_max_norm(anomaly_map_smoothed) # Normalize to 0-1 for heatmap blending
-    
-    # Create blended heatmap on original image
-    # Ensure raw_image_disp is (H,W,C)
-    if raw_image_disp.ndim == 2: # Grayscale to RGB for blending if needed
-        raw_image_disp_rgb = cv2.cvtColor(raw_image_disp, cv2.COLOR_GRAY2RGB)
+    # --- Prepare all display images (convert CHW to HWC, scale to 0-255 uint8) ---
+    def prep_display_img(img_data_chw, is_mask=False): # Added is_mask for specific handling if needed
+        if img_data_chw is None:
+            ph_size = args_config.get("img_size", [64, 64])
+            placeholder = np.zeros((ph_size[0], ph_size[1], 3), dtype=np.uint8)
+            # Slightly smaller font for "N/A" if it helps
+            cv2.putText(placeholder, "N/A", (int(ph_size[1]*0.2), int(ph_size[0]*0.55)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (128, 128, 128), 1)
+            return placeholder
+        
+        processed_img_data = image_transform_back_to_255(img_data_chw) # Returns (C,H,W) uint8
+
+        if processed_img_data.shape[0] == 1: # Grayscale C,H,W -> H,W
+            img_hw = processed_img_data[0]
+            return img_hw
+        else: # RGB C,H,W -> H,W,C
+            img_hwc = processed_img_data.transpose(1,2,0)
+            return img_hwc
+
+    raw_image_disp_hwc = prep_display_img(raw_image_orig_chw_01)
+    gt_mask_disp_hw = prep_display_img(gt_mask_chw_01, is_mask=True)
+
+    if out_mask_chw_01 is not None:
+        anomaly_map_raw_hw = out_mask_chw_01[0]
+        anomaly_map_smoothed_hw = gaussian_filter(anomaly_map_raw_hw, sigma=args_config.get("viz_gaussian_sigma", 4))
+        anomaly_map_normalized_hw = min_max_norm(anomaly_map_smoothed_hw)
+
+        raw_for_blend_hwc = raw_image_disp_hwc.copy()
+        if raw_for_blend_hwc.ndim == 2:
+            raw_for_blend_hwc = cv2.cvtColor(raw_for_blend_hwc, cv2.COLOR_GRAY2RGB)
+        heatmap_on_image_disp_hwc = show_cam_on_image(raw_for_blend_hwc, anomaly_map_normalized_hw)
+        out_mask_disp_hw = (anomaly_map_normalized_hw * 255.0).astype(np.uint8)
     else:
-        raw_image_disp_rgb = raw_image_disp
-    heatmap_on_image = show_cam_on_image(raw_image_disp_rgb, anomaly_map_normalized)
+        heatmap_on_image_disp_hwc = prep_display_img(None)
+        ph_size_hw = args_config.get("img_size", [64, 64])
+        out_mask_disp_hw = prep_display_img(np.zeros((1, ph_size_hw[0], ph_size_hw[1])))[0]
 
-    out_mask_disp = (anomaly_map_normalized * 255.0).astype(np.uint8) # Display normalized map directly too
 
-    # Reconstructed images (clamp to [-1,1] then convert to 0-255 HWC)
-    recon_condition_disp = image_transform_back_to_255(pred_x_0_condition_chw_01.transpose(1,2,0))
-    
-    # Optional visualizations if data is provided
-    displays = {
-        "Input": raw_image_disp, "GT Mask": gt_mask_disp, "AnomalyMap": heatmap_on_image, "Pred Mask": out_mask_disp,
-        "Recon (Cond)": recon_condition_disp
-    }
-    cmaps = {"GT Mask": "gray", "Pred Mask": "gray"}
+    x_normal_t_disp_hwc = prep_display_img(x_normal_t_chw_01)
+    x_noiser_t_disp_hwc = prep_display_img(x_noiser_t_chw_01)
+    pred_x_t_noisier_disp_hwc = prep_display_img(pred_x_t_noisier_chw_01)
+    recon_normal_disp_hwc = prep_display_img(pred_x_0_normal_chw_01)
+    recon_noisier_disp_hwc = prep_display_img(pred_x_0_noisier_chw_01)
+    recon_con_disp_hwc = prep_display_img(pred_x_0_condition_chw_01)
 
-    if x_normal_t_chw_01 is not None:
-        displays["x_normal_t"] = image_transform_back_to_255(x_normal_t_chw_01.transpose(1,2,0))
-    if x_noiser_t_chw_01 is not None:
-        displays["x_noiser_t"] = image_transform_back_to_255(x_noiser_t_chw_01.transpose(1,2,0))
-    if pred_x_t_noisier_chw_01 is not None:
-        displays["pred_x_t_noisier"] = image_transform_back_to_255(pred_x_t_noisier_chw_01.transpose(1,2,0))
-    if pred_x_0_normal_chw_01 is not None:
-        displays["Recon (Normal_t)"] = image_transform_back_to_255(pred_x_0_normal_chw_01.transpose(1,2,0))
-    if pred_x_0_noisier_chw_01 is not None:
-        displays["Recon (Noisier_t)"] = image_transform_back_to_255(pred_x_0_noisier_chw_01.transpose(1,2,0))
+    plot_titles_row1 = ["Input", "GT", "x_normal_t", "x_noiser_t", "pred_x_t_noisier"]
+    plot_data_row1 = [
+        raw_image_disp_hwc, gt_mask_disp_hw, x_normal_t_disp_hwc,
+        x_noiser_t_disp_hwc, pred_x_t_noisier_disp_hwc
+    ]
+    plot_cmaps_row1 = [None, "gray", None, None, None]
 
-    num_images = len(displays)
-    cols = 5 
-    rows = (num_images + cols - 1) // cols
-    
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
-    axes = axes.flatten() # Flatten to 1D array for easy indexing
+    plot_titles_row2 = ["heatmap", "out_mask", "recon_normal", "recon_noisier", "recon_con"]
+    plot_data_row2 = [
+        heatmap_on_image_disp_hwc, out_mask_disp_hw, recon_normal_disp_hwc,
+        recon_noisier_disp_hwc, recon_con_disp_hwc
+    ]
+    plot_cmaps_row2 = [None, "gray", None, None, None]
 
-    fig.suptitle(f'Class: {sub_class_name} - Image: {os.path.basename(image_path_str)} - Score: {image_score_val:.4f}', fontsize=10)
+    # --- Modified fig creation and layout ---
+    fig, axes = plt.subplots(2, 5, figsize=(15, 7.2), constrained_layout=True) # Increased height, enabled constrained_layout
+    fig.suptitle(f'Class: {sub_class_name} - Img: {os.path.basename(image_path_str)} - Score: {image_score_val:.4f}', fontsize=10)
 
-    for i, (title, img_data) in enumerate(displays.items()):
-        axes[i].imshow(img_data, cmap=cmaps.get(title, None))
-        axes[i].set_title(title, fontsize=8)
-        axes[i].axis('off')
-    
-    # Turn off unused subplots
-    for j in range(i + 1, len(axes)):
-        axes[j].axis('off')
+    title_fontsize = 7 # Slightly reduced title font size
 
-    # Generate save name for the visualization
-    base_savename = os.path.basename(image_path_str).replace('.png', '').replace('.jpg', '').replace('.jpeg', '')
-    savename_full = os.path.join(viz_path, f"{sub_class_name}_{base_savename}_viz.png")
-    
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to make space for suptitle
+    for i in range(5):
+        axes[0, i].imshow(plot_data_row1[i], cmap=plot_cmaps_row1[i])
+        axes[0, i].set_title(plot_titles_row1[i], fontsize=title_fontsize)
+        axes[0, i].axis('off')
+
+    for i in range(5):
+        axes[1, i].imshow(plot_data_row2[i], cmap=plot_cmaps_row2[i])
+        axes[1, i].set_title(plot_titles_row2[i], fontsize=title_fontsize)
+        axes[1, i].axis('off')
+
+    # fig.tight_layout(rect=[0, 0.03, 1, 0.95]) # constrained_layout usually replaces tight_layout
+                                             # If you still need to adjust overall rect with constrained_layout,
+                                             # it's possible but often not necessary.
+                                             # For suptitle space, constrained_layout should handle it.
+                                             # If suptitle is still an issue, you might use fig.set_constrained_layout_pads
+
+    base_savename = os.path.basename(image_path_str)
+    for ext in ['.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG']:
+        base_savename = base_savename.replace(ext, '')
+    savename_full = os.path.join(viz_path_specific, f"{sub_class_name}_{base_savename}_viz.png")
+
     plt.savefig(savename_full)
     plt.close(fig)
 
@@ -469,7 +490,7 @@ def testing(testing_dataset_loader, args_config, unet_model, seg_model, sub_clas
                 current_image_score = torch.mean(flat_pred_map, dim=1)
             
             all_image_scores.extend(current_image_score.cpu().numpy())
-            all_image_labels.extend(image_label_gt.squeeze().cpu().numpy()) # Ensure labels are flat
+            all_image_labels.extend(image_label_gt.cpu().numpy().flatten().tolist()) # 确保标签是扁平的列表 # Ensure labels are flat
 
             # Pixel-level: store flattened GT masks and predicted anomaly maps
             # These are added to lists for later processing by pixel_pro
@@ -557,9 +578,6 @@ def main():
     # Define dataset classes and paths (can be loaded from args or defined here)
     # These are examples; ensure they match your `args1.json` and project structure.
     mvtec_classes_default = ['carpet', 'grid', 'leather', 'tile', 'wood', 'bottle', 'cable', 'capsule', 'hazelnut', 'metal_nut', 'pill', 'screw', 'toothbrush', 'transistor', 'zipper']
-    mpdd_classes_default = ['bracket_black', 'bracket_brown', 'bracket_white', 'connector', 'metal_plate', 'tubes'] 
-    visa_classes_default = ['candle', 'capsules', 'cashew', 'chewinggum', 'fryum', 'macaroni1', 'macaroni2', 'pcb1', 'pcb2', 'pcb3', 'pcb4', 'pipe_fryum']
-    dagm_classes_default = [f'Class{i}' for i in range(1, 11)]
     custom_dataset_classes_default = ['chamber'] # From original eval.py
     
     # Determine which set of classes to evaluate
@@ -585,7 +603,7 @@ def main():
     # However, usually, one args file is used for a run.
     
     # Let's load one args file for the entire evaluation session:
-    args_config_session, _ = load_parameters_and_checkpoint(device, "dummy_class_for_args_load_only", "dummy_type", args_filename_to_use)
+    args_config_session, _ = load_parameters_and_checkpoint(device, "chamber", "best", args_filename_to_use)
     if args_config_session is None:
         print("Failed to load base arguments. Exiting.")
         return
