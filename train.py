@@ -448,7 +448,7 @@ def main():
 
         training_loader = DataLoader(training_dataset, batch_size=args['Batch_Size'], shuffle=True, 
                                      num_workers=args.get("num_workers_train", 4), pin_memory=True, drop_last=True)
-        testing_loader = DataLoader(testing_dataset, batch_size=args.get("test_batch_size", 1), shuffle=False, 
+        testing_loader = DataLoader(testing_dataset, batch_size=args.get("eval_batch_size", 1), shuffle=False, 
                                     num_workers=args.get("num_workers_test", 4))
 
         # Create directories for outputs (models, images, metrics)
