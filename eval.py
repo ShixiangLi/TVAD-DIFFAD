@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import torch
 # from skimage.metrics import structural_similarity as ssim # If using SSIM
-from sklearn.metrics import auc, roc_curve, average_precision_score
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import auc, roc_curve, average_precision_score, roc_auc_score
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix # New imports
 # import time # Unused
 import numpy as np
 from scipy.ndimage import gaussian_filter
@@ -518,22 +518,67 @@ def testing(testing_dataset_loader, args_config, unet_model, seg_model, sub_clas
     all_image_scores_np = np.array(all_image_scores)
     all_image_labels_np = np.array(all_image_labels)
     
-    # Image AUROC
+    # Initialize metrics
     auroc_image = 0.0
-    if len(np.unique(all_image_labels_np)) > 1:
-        auroc_image = roc_auc_score(all_image_labels_np, all_image_scores_np) * 100
-        print(f"Image AUROC for {sub_class_name}: {auroc_image:.2f}%")
-    else:
-        print(f"Image AUROC for {sub_class_name}: Not defined (single class in GT labels)")
-
-    # Pixel AUROC & AUPRO (using the collected lists for pixel_pro)
+    accuracy_image = 0.0
+    f1_image = 0.0
+    fdr_image = 0.0
+    mdr_image = 0.0
     auroc_pixel = 0.0
     ap_pixel = 0.0
     aupro_pixel = 0.0
+    miou_pixel = 0.0
 
-    # Ensure lists are not empty and contain valid data before passing to metrics
+    if len(np.unique(all_image_labels_np)) > 1:
+        auroc_image = roc_auc_score(all_image_labels_np, all_image_scores_np) * 100
+        print(f"Image AUROC for {sub_class_name}: {auroc_image:.2f}%")
+
+        # Determine optimal threshold for image-level metrics from ROC curve
+        fpr_img, tpr_img, thresholds_img = roc_curve(all_image_labels_np, all_image_scores_np)
+        optimal_idx_img = np.argmax(tpr_img - fpr_img)
+        optimal_threshold_img = thresholds_img[optimal_idx_img]
+        print(f"Optimal Image Threshold for Acc/F1/FDR/MDR: {optimal_threshold_img:.4f}")
+        
+        binary_predictions_img = (all_image_scores_np >= optimal_threshold_img).astype(int)
+        
+        accuracy_image = accuracy_score(all_image_labels_np, binary_predictions_img) * 100
+        f1_image = f1_score(all_image_labels_np, binary_predictions_img) * 100
+        
+        # Confusion matrix to calculate FDR and MDR
+        cm_img = confusion_matrix(all_image_labels_np, binary_predictions_img)
+        if cm_img.size == 1: # Only one class predicted or present
+            tn_img, fp_img, fn_img, tp_img = 0,0,0,0
+            if all_image_labels_np[0] == 0 and binary_predictions_img[0] == 0: tn_img = len(all_image_labels_np)
+            elif all_image_labels_np[0] == 1 and binary_predictions_img[0] == 1: tp_img = len(all_image_labels_np)
+            # Add other cases if needed, or rely on sklearn to handle simple cases (though it might still error on ravel())
+            # This is a simplified handling for single class result in CM.
+        elif cm_img.size == 4 : # Standard 2x2 case
+            tn_img, fp_img, fn_img, tp_img = cm_img.ravel()
+        else: # Non-standard CM, default to 0 for safety, or log error
+            tn_img, fp_img, fn_img, tp_img = 0,0,0,0
+            print(f"Warning: Image confusion matrix has unexpected shape: {cm_img.shape}")
+
+
+        if (fp_img + tp_img) > 0:
+            fdr_image = (fp_img / (fp_img + tp_img)) * 100
+        else:
+            fdr_image = 0.0 # Or np.nan if you prefer to indicate undefined
+
+        if (fn_img + tp_img) > 0:
+            mdr_image = (fn_img / (fn_img + tp_img)) * 100
+        else:
+            mdr_image = 0.0 # Or np.nan
+
+        print(f"Image Accuracy for {sub_class_name}: {accuracy_image:.2f}%")
+        print(f"Image F1-score for {sub_class_name}: {f1_image:.2f}%")
+        print(f"Image FDR for {sub_class_name}: {fdr_image:.2f}%")
+        print(f"Image MDR for {sub_class_name}: {mdr_image:.2f}%")
+
+    else:
+        print(f"Image AUROC/Acc/F1/FDR/MDR for {sub_class_name}: Not defined (single class in GT labels)")
+
+    # Pixel AUROC & AUPRO (using the collected lists for pixel_pro)
     if all_pixel_gts_list and all_pixel_preds_list:
-        # For roc_auc_score and average_precision_score, inputs need to be flattened arrays
         flat_pixel_gts_np = np.concatenate([mask.flatten() for mask in all_pixel_gts_list]).astype(int)
         flat_pixel_preds_np = np.concatenate([smap.flatten() for smap in all_pixel_preds_list])
 
@@ -542,11 +587,42 @@ def testing(testing_dataset_loader, args_config, unet_model, seg_model, sub_clas
             ap_pixel = average_precision_score(flat_pixel_gts_np, flat_pixel_preds_np) * 100
             print(f"Pixel AUROC for {sub_class_name}: {auroc_pixel:.2f}%")
             print(f"Pixel AP for {sub_class_name}: {ap_pixel:.2f}%")
-        else:
-            print(f"Pixel AUROC/AP for {sub_class_name}: Not defined (single class in pixel GT)")
 
-        # AUPRO calculation
-        # pixel_pro expects list of 2D arrays or a 3D array (N,H,W)
+            # Pixel mIoU
+            fpr_px, tpr_px, thresholds_px = roc_curve(flat_pixel_gts_np, flat_pixel_preds_np)
+            optimal_idx_px = np.argmax(tpr_px - fpr_px)
+            optimal_threshold_px = thresholds_px[optimal_idx_px]
+            print(f"Optimal Pixel Threshold for mIoU: {optimal_threshold_px:.4f}")
+
+            binary_pixel_preds_np = (flat_pixel_preds_np >= optimal_threshold_px).astype(int)
+            
+            cm_pixel = confusion_matrix(flat_pixel_gts_np, binary_pixel_preds_np)
+            if cm_pixel.size == 1:
+                tn_px, fp_px, fn_px, tp_px = 0,0,0,0
+                if flat_pixel_gts_np[0] == 0 and binary_pixel_preds_np[0] == 0: tn_px = len(flat_pixel_gts_np)
+                elif flat_pixel_gts_np[0] == 1 and binary_pixel_preds_np[0] == 1: tp_px = len(flat_pixel_gts_np)
+            elif cm_pixel.size == 4:
+                tn_px, fp_px, fn_px, tp_px = cm_pixel.ravel()
+            else:
+                tn_px, fp_px, fn_px, tp_px = 0,0,0,0
+                print(f"Warning: Pixel confusion matrix has unexpected shape: {cm_pixel.shape}")
+
+
+            iou_anomaly_class = 0.0
+            if (tp_px + fp_px + fn_px) > 0:
+                iou_anomaly_class = tp_px / (tp_px + fp_px + fn_px)
+            
+            iou_normal_class = 0.0
+            if (tn_px + fn_px + fp_px) > 0: # Denominator for normal IoU: TN / (TN + FN + FP)
+                iou_normal_class = tn_px / (tn_px + fn_px + fp_px)
+            
+            miou_pixel = ((iou_anomaly_class + iou_normal_class) / 2) * 100
+            print(f"Pixel mIoU for {sub_class_name}: {miou_pixel:.2f}%")
+
+        else:
+            print(f"Pixel AUROC/AP/mIoU for {sub_class_name}: Not defined (single class in pixel GT)")
+
+        # AUPRO calculation (original)
         aupro_pixel = pixel_pro(np.array(all_pixel_gts_list), np.array(all_pixel_preds_list)) * 100
         print(f"Pixel AUPRO for {sub_class_name}: {aupro_pixel:.2f}%")
     else:
@@ -559,10 +635,15 @@ def testing(testing_dataset_loader, args_config, unet_model, seg_model, sub_clas
     
     metrics_data = {
         "classname": [sub_class_name], 
-        "Image-AUROC": [round(auroc_image, 2)], 
+        "Image-AUROC": [round(auroc_image, 2)],
+        "Image-Accuracy": [round(accuracy_image, 2)],
+        "Image-F1": [round(f1_image, 2)],
+        "Image-FDR": [round(fdr_image, 2)],
+        "Image-MDR": [round(mdr_image, 2)],
         "Pixel-AUROC": [round(auroc_pixel, 2)], 
-        "Pixel-AUPRO": [round(aupro_pixel, 2)], 
-        "Pixel-AP": [round(ap_pixel, 2)]
+        "Pixel-mIoU": [round(miou_pixel, 2)],
+        "Pixel-AUPRO": [round(aupro_pixel, 2)], # Keeping AUPRO as it was there
+        "Pixel-AP": [round(ap_pixel, 2)] # Keeping AP as it was there
     }
     df_metrics = pd.DataFrame(metrics_data)
     
