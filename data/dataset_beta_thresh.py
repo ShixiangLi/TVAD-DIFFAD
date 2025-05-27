@@ -542,7 +542,7 @@ class CustomTrainDataset(Dataset):
         # original_cv2_resized_hwc: original image (0-255), HWC format, for self-augmentation source
         # anomaly_source_path_sel: path to DTD image
         
-        if random.random() > 0.5: # 50% chance no anomaly
+        if random.random() > 0.1: # 50% chance no anomaly
             return image_norm_hwc.astype(np.float32), \
                    np.zeros((self.img_size[0], self.img_size[1], 1), dtype=np.float32), \
                    np.array([0.0], dtype=np.float32)
