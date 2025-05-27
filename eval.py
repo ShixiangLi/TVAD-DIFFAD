@@ -776,7 +776,7 @@ def main():
             
         test_loader_current = DataLoader(testing_dataset_current, 
                                          batch_size=args_config.get("eval_batch_size", 1), # Allow configurable batch size for eval
-                                         shuffle=False, 
+                                         shuffle=True, 
                                          num_workers=args_config.get("num_workers_eval", 4))
         
         # Make directories for this specific evaluation run's metrics/visualizations

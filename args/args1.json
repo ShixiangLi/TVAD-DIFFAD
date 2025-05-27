@@ -3,7 +3,7 @@
   "channels": 3,
   "Batch_Size": 64,
   "eval_batch_size": 64,
-  "EPOCHS": 100,
+  "EPOCHS": 20,
   "T": 1000,
   "seed": 42,
 
@@ -34,8 +34,9 @@
 
   "eval_normal_t": 200,
   "eval_noisier_t": 400,
-  "eval_every_epochs": 10,
+  "eval_every_epochs": 5,
   "log_loss_every_epochs": 5,
+  "image_score_top_k": 50,
 
   "output_path": "outputs",
   "num_workers_train": 4,
@@ -57,7 +58,7 @@
   "anomaly_source_path": "datasets/DTD",
 
   "save_visualizations_eval": true,
-  "num_viz_to_save": 50,
+  "num_viz_to_save": 1000,
   "viz_gaussian_sigma": 4,
 
   "random_slice": true,
